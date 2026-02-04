@@ -89,6 +89,11 @@ export const taskApi = {
   cancelTask: async (id: string): Promise<void> => {
     await api.post(`/tasks/${id}/cancel`);
   },
+
+  seedDemoTasks: async (): Promise<{ message: string; count: number }> => {
+    const response = await api.post('/tasks/seed');
+    return response.data;
+  },
 };
 
 // Chat API

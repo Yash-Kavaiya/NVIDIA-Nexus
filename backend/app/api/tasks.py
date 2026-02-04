@@ -61,3 +61,24 @@ async def cancel_task(
     if not success:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"message": "Task cancelled"}
+
+
+@router.post("/")
+async def create_task(
+    title: str,
+    description: str = "",
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new task"""
+    task = await task_service.create_task(db, title, description)
+    return task
+
+
+@router.post("/seed")
+async def seed_demo_tasks(
+    db: AsyncSession = Depends(get_db)
+):
+    """Seed demo placeholder tasks for testing"""
+    tasks = await task_service.seed_demo_tasks(db)
+    return {"message": f"Created {len(tasks)} demo tasks", "count": len(tasks)}
+

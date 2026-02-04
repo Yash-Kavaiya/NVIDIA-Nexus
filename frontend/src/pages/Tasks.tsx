@@ -52,6 +52,17 @@ export default function Tasks() {
     }
   });
 
+  const seedMutation = useMutation({
+    mutationFn: taskApi.seedDemoTasks,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      addToast('success', `Created ${data.count} demo tasks`);
+    },
+    onError: () => {
+      addToast('error', 'Failed to seed demo tasks');
+    }
+  });
+
   const filteredTasks = tasks.filter(task => {
     if (filter === 'all') return true;
     if (filter === 'active') return ['pending', 'planning', 'executing', 'paused'].includes(task.status);
@@ -112,6 +123,13 @@ export default function Tasks() {
             className="p-2 rounded-lg bg-nvidia-gray hover:bg-nvidia-gray-light text-nvidia-text-secondary transition-colors"
           >
             <RefreshCw className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => seedMutation.mutate()}
+            disabled={seedMutation.isPending}
+            className="px-4 py-2 rounded-lg bg-nvidia-green text-nvidia-black text-sm font-medium hover:bg-nvidia-green-bright transition-colors disabled:opacity-50"
+          >
+            {seedMutation.isPending ? 'Seeding...' : '+ Demo Tasks'}
           </button>
         </div>
       </div>

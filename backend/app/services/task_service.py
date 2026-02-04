@@ -107,3 +107,124 @@ class TaskService:
                 if progress >= 100:
                     task.status = "completed"
                 await db.commit()
+    
+    async def create_task(
+        self,
+        db: AsyncSession,
+        title: str,
+        description: str,
+        steps: list[dict] = None
+    ) -> Task:
+        """Create a new task with optional steps"""
+        import uuid
+        
+        task_id = str(uuid.uuid4())
+        task = Task(
+            id=task_id,
+            title=title,
+            description=description,
+            status="pending",
+            progress=0.0
+        )
+        db.add(task)
+        
+        if steps:
+            for i, step_data in enumerate(steps):
+                step = TaskStep(
+                    id=str(uuid.uuid4()),
+                    task_id=task_id,
+                    description=step_data.get("description", f"Step {i+1}"),
+                    status="pending",
+                    order=i
+                )
+                db.add(step)
+        
+        await db.commit()
+        await db.refresh(task)
+        return task
+    
+    async def seed_demo_tasks(self, db: AsyncSession) -> list[Task]:
+        """Seed demo placeholder tasks for testing"""
+        import uuid
+        from datetime import datetime, timedelta
+        
+        demo_tasks = [
+            {
+                "title": "Organize Downloads Folder",
+                "description": "AI-powered organization of files in Downloads folder by type and date",
+                "status": "executing",
+                "progress": 45.0,
+                "steps": [
+                    {"description": "Scanning folder structure"},
+                    {"description": "Classifying files by type", "status": "completed"},
+                    {"description": "Creating organized subfolders"},
+                    {"description": "Moving files to appropriate folders"},
+                    {"description": "Generating summary report"}
+                ]
+            },
+            {
+                "title": "Document Analysis",
+                "description": "Analyze and extract insights from PDF documents",
+                "status": "completed",
+                "progress": 100.0,
+                "steps": [
+                    {"description": "Loading documents", "status": "completed"},
+                    {"description": "Extracting text content", "status": "completed"},
+                    {"description": "Running AI analysis", "status": "completed"},
+                    {"description": "Generating insights report", "status": "completed"}
+                ]
+            },
+            {
+                "title": "Duplicate File Detection",
+                "description": "Find and remove duplicate files to free up disk space",
+                "status": "pending",
+                "progress": 0.0,
+                "steps": [
+                    {"description": "Scanning directories"},
+                    {"description": "Computing file hashes"},
+                    {"description": "Identifying duplicates"},
+                    {"description": "Generating removal suggestions"}
+                ]
+            },
+            {
+                "title": "Photo Batch Rename",
+                "description": "Rename photos using AI-detected content and dates",
+                "status": "paused",
+                "progress": 25.0,
+                "steps": [
+                    {"description": "Loading images", "status": "completed"},
+                    {"description": "Running image recognition"},
+                    {"description": "Extracting EXIF metadata"},
+                    {"description": "Generating new filenames"},
+                    {"description": "Applying renames"}
+                ]
+            }
+        ]
+        
+        created_tasks = []
+        for task_data in demo_tasks:
+            task_id = str(uuid.uuid4())
+            task = Task(
+                id=task_id,
+                title=task_data["title"],
+                description=task_data["description"],
+                status=task_data["status"],
+                progress=task_data["progress"]
+            )
+            db.add(task)
+            
+            for i, step_data in enumerate(task_data.get("steps", [])):
+                step = TaskStep(
+                    id=str(uuid.uuid4()),
+                    task_id=task_id,
+                    description=step_data["description"],
+                    status=step_data.get("status", "pending"),
+                    order=i
+                )
+                db.add(step)
+            
+            created_tasks.append(task)
+        
+        await db.commit()
+        return created_tasks
+
