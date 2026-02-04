@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: nvidia-nexus-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - DATABASE_URL=sqlite+aiosqlite:///./data/nvidia_nexus.db
+      - DEBUG=True
+    env_file:
+      - .env
+    networks:
+      - nvidia-nexus-network
+
+  frontend:
+    build: ./frontend
+    container_name: nvidia-nexus-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - nvidia-nexus-network
+
+networks:
+  nvidia-nexus-network:
+    driver: bridge
+
+volumes:
+  uploads:
+  data:

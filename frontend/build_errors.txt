@@ -1,0 +1,5 @@
+﻿src/pages/Settings.tsx(2,21): error TS6133: 'Bell' is declared but its value is never read.
+src/pages/Settings.tsx(2,64): error TS6133: 'Type' is declared but its value is never read.
+src/pages/Settings.tsx(3,1): error TS6133: 'motion' is declared but its value is never read.
+src/pages/Tasks.tsx(13,3): error TS6133: 'MoreVertical' is declared but its value is never read.
+src/pages/Tasks.tsx(18,1): error TS6133: 'Task' is declared but its value is never read.

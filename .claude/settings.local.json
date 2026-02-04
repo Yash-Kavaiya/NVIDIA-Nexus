@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:docs.api.nvidia.com)",
+      "Bash(python:*)",
+      "Bash(netstat:*)",
+      "Bash(powershell:*)",
+      "Bash(tree:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(pip uninstall:*)"
+    ]
+  }
+}
