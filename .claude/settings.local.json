@@ -13,7 +13,14 @@
       "Bash(docker-compose:*)",
       "Bash(node --version:*)",
       "Bash(npm:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(pip show:*)",
+      "Bash(ss:*)",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\yashk\\\\Downloads\\\\nvidia\\\\NVIDIA-Nexus\\\\backend && start /b python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > C:\\\\Users\\\\yashk\\\\Downloads\\\\nvidia\\\\NVIDIA-Nexus\\\\backend.log 2>&1\")",
+      "Bash(PYTHONIOENCODING=utf-8 python:*)",
+      "Bash(start chrome:*)"
     ]
   }
 }

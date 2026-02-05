@@ -8,20 +8,14 @@ from sqlalchemy import select, delete
 import aiofiles
 import mimetypes
 
-try:
-    import magic
-    HAS_MAGIC = True
-except Exception:
-    HAS_MAGIC = False
+HAS_MAGIC = False
 
 from app.models.file import FileMetadata, FileOperation
 from app.models.task import Task, TaskStep
 from app.core.config import settings
 
 def _get_mime_type(file_path: str) -> str:
-    """Get MIME type using python-magic if available, else mimetypes."""
-    if HAS_MAGIC:
-        return _get_mime_type(file_path)
+    """Get MIME type using mimetypes."""
     mime_type, _ = mimetypes.guess_type(file_path)
     return mime_type or "application/octet-stream"
 
