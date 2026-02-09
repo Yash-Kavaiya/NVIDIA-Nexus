@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nvidia-nexus-backend
+  labels:
+    app: nvidia-nexus
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nvidia-nexus
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: nvidia-nexus
+        component: backend
+    spec:
+      serviceAccountName: nvidia-nexus-sa
+      containers:
+      - name: backend
+        image: us-central1-docker.pkg.dev/PROJECT_ID/nvidia-nexus-docker/backend:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: DATABASE_URL
+          value: "sqlite+aiosqlite:///./data/nvidia_nexus.db"
+        - name: DEBUG
+          value: "False"
+        - name: NVIDIA_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: nvidia-api-key
+              key: api-key
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: uploads
+          mountPath: /app/uploads
+        - name: data
+          mountPath: /app/data
+      volumes:
+      - name: uploads
+        persistentVolumeClaim:
+          claimName: nvidia-nexus-uploads-pvc
+      - name: data
+        persistentVolumeClaim:
+          claimName: nvidia-nexus-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  labels:
+    app: nvidia-nexus
+    component: backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: nvidia-nexus
+    component: backend

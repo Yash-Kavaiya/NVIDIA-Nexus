@@ -1,0 +1,85 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_BACKEND_REPO: nvidia-nexus-backend
+  ECR_FRONTEND_REPO: nvidia-nexus-frontend
+  ECS_CLUSTER: nvidia-nexus-cluster
+  ECS_BACKEND_SERVICE: nvidia-nexus-backend
+  ECS_FRONTEND_SERVICE: nvidia-nexus-frontend
+
+jobs:
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+    
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
+    
+    - name: Build and push backend image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd backend
+        docker build -t $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG .
+        docker tag $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG $ECR_REGISTRY/$ECR_BACKEND_REPO:latest
+        docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_BACKEND_REPO:latest
+    
+    - name: Build and push frontend image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd frontend
+        docker build -t $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG .
+        docker tag $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest
+        docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_FRONTEND_REPO:latest
+    
+    - name: Update ECS backend service
+      run: |
+        aws ecs update-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service ${{ env.ECS_BACKEND_SERVICE }} \
+          --force-new-deployment \
+          --region ${{ env.AWS_REGION }}
+    
+    - name: Update ECS frontend service
+      run: |
+        aws ecs update-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service ${{ env.ECS_FRONTEND_SERVICE }} \
+          --force-new-deployment \
+          --region ${{ env.AWS_REGION }}
+    
+    - name: Wait for services to stabilize
+      run: |
+        aws ecs wait services-stable \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --services ${{ env.ECS_BACKEND_SERVICE }} ${{ env.ECS_FRONTEND_SERVICE }} \
+          --region ${{ env.AWS_REGION }}
+    
+    - name: Deployment summary
+      run: |
+        echo "✅ Deployment completed successfully!"
+        echo "Backend image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:${{ github.sha }}"
+        echo "Frontend image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:${{ github.sha }}"

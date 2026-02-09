@@ -1,0 +1,37 @@
+# GCP Configuration
+project_id   = "your-gcp-project-id"
+project_name = "nvidia-nexus"
+region       = "us-central1"
+environment  = "dev"
+
+# Deployment Options
+use_cloud_run = true   # Set to false to use GKE
+use_cloud_sql = false  # Set to true for production with PostgreSQL
+
+# Network Configuration
+subnet_cidr    = "10.0.0.0/24"
+pods_cidr      = "10.1.0.0/16"
+services_cidr  = "10.2.0.0/16"
+
+# GKE Configuration (if use_cloud_run = false)
+gke_machine_type = "e2-medium"
+gke_node_count   = 2
+gke_min_nodes    = 1
+gke_max_nodes    = 5
+
+# Cloud Run Configuration (if use_cloud_run = true)
+backend_cpu            = "1"
+backend_memory         = "1Gi"
+frontend_cpu           = "1"
+frontend_memory        = "512Mi"
+backend_min_instances  = 0
+backend_max_instances  = 10
+frontend_min_instances = 0
+frontend_max_instances = 10
+
+# Database Configuration (if use_cloud_sql = true)
+db_tier = "db-f1-micro"
+# db_password = "your-secure-password"
+
+# Secrets (DO NOT COMMIT - use terraform.tfvars locally)
+# nvidia_api_key = "your-nvidia-api-key-here"

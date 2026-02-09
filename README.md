@@ -33,11 +33,13 @@ A powerful AI assistant built with FastAPI and React, featuring NVIDIA's dark th
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Local Development
+
+#### Prerequisites
 - Docker and Docker Compose
 - NVIDIA API Key (for Nemotron-3 access)
 
-### 1. Setup Environment
+#### 1. Setup Environment
 
 ```bash
 # Copy environment template
@@ -46,17 +48,40 @@ cp .env.example .env
 # Edit .env and add your NVIDIA API key
 ```
 
-### 2. Run with Docker
+#### 2. Run with Docker
 
 ```bash
 docker-compose up --build
 ```
 
-### 3. Access the Application
+#### 3. Access the Application
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
+
+### ☁️ Cloud Deployment
+
+Deploy to AWS or Google Cloud Platform with Terraform:
+
+```bash
+# AWS (ECS Fargate)
+cd terraform/aws
+./deploy.sh apply
+
+# GCP (Cloud Run)
+cd terraform/gcp
+./deploy.sh apply
+```
+
+**📖 Full deployment guide:** [TERRAFORM_DEPLOYMENT.md](TERRAFORM_DEPLOYMENT.md)
+
+**Features:**
+- ✅ Production-ready infrastructure
+- ✅ Auto-scaling and load balancing
+- ✅ Secure secrets management
+- ✅ CI/CD pipelines included
+- ✅ ~15 minute deployment
 
 ## 📦 Project Structure
 
