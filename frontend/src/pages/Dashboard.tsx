@@ -1,4 +1,7 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
+import { chatApi } from '../services/api';
 import {
   FolderOpen,
   MessageSquare,
@@ -6,7 +9,8 @@ import {
   Clock,
   TrendingUp,
   FileText,
-  Zap
+  Zap,
+  ListTodo
 } from 'lucide-react';
 import { AnimatedCounter } from '../components/UI/AnimatedCounter';
 import { StaggerContainer, StaggerItem } from '../components/UI/StaggerContainer';
@@ -14,45 +18,63 @@ import GlowEffect from '../components/UI/GlowEffect';
 
 export default function Dashboard() {
   const { files, tasks } = useStore();
+  const navigate = useNavigate();
+  const [conversationCount, setConversationCount] = useState(0);
+
+  useEffect(() => {
+    chatApi.getConversations().then((data) => {
+      setConversationCount(Array.isArray(data) ? data.length : 0);
+    }).catch(() => {});
+  }, []);
+
+  const activeTasks = tasks.filter(t => t.status === 'executing' || t.status === 'pending').length;
 
   const stats = [
     {
       label: 'Files Managed',
       value: files.length,
       icon: FolderOpen,
-      trend: '+12%',
       color: 'nvidia-green'
     },
     {
       label: 'AI Conversations',
-      value: 24,
+      value: conversationCount,
       icon: MessageSquare,
-      trend: '+5',
       color: 'nvidia-green-bright'
     },
     {
       label: 'Tasks Completed',
       value: tasks.filter(t => t.status === 'completed').length,
       icon: CheckCircle,
-      trend: '+3',
       color: 'nvidia-green'
     },
     {
-      label: 'Time Saved',
-      value: 12.5,
-      suffix: 'h',
-      icon: Clock,
-      trend: 'This week',
+      label: 'Active Tasks',
+      value: activeTasks,
+      icon: ListTodo,
       color: 'nvidia-green-bright'
     },
   ];
 
-  const recentActivity = [
-    { type: 'task', title: 'Organized Downloads folder', time: '2 hours ago', status: 'completed' },
-    { type: 'chat', title: 'Analyzed project documents', time: '4 hours ago', status: 'success' },
-    { type: 'file', title: 'Renamed 150 files', time: 'Yesterday', status: 'completed' },
-    { type: 'task', title: 'Generated project report', time: 'Yesterday', status: 'completed' },
-  ];
+  // Build recent activity from real tasks
+  const recentActivity = tasks
+    .slice()
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .slice(0, 5)
+    .map((task) => {
+      const date = new Date(task.updatedAt || task.createdAt);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffH = Math.floor(diffMs / (1000 * 60 * 60));
+      const time = diffH < 1 ? 'Just now' : diffH < 24 ? `${diffH}h ago` : `${Math.floor(diffH / 24)}d ago`;
+
+      return {
+        type: 'task',
+        title: task.title || task.type || 'Task',
+        time,
+        status: task.status,
+      };
+    });
 
   return (
     <div className="space-y-6">
@@ -90,11 +112,9 @@ export default function Dashboard() {
                 <div className={`p-2 rounded-lg bg-nvidia-gray group-hover:bg-nvidia-green font-medium transition-colors duration-300`}>
                   <stat.icon className={`w-5 h-5 ${stat.color === 'nvidia-green' ? 'text-nvidia-green' : 'text-nvidia-green-bright'} group-hover:text-nvidia-black`} />
                 </div>
-                <span className="text-xs text-nvidia-green font-medium px-2 py-1 bg-nvidia-green/5 rounded-full">{stat.trend}</span>
               </div>
               <div className="text-3xl font-bold mb-1 flex items-baseline">
                 <AnimatedCounter value={stat.value} />
-                {stat.suffix && <span className="text-lg ml-1 text-nvidia-text-secondary">{stat.suffix}</span>}
               </div>
               <div className="text-sm text-nvidia-text-secondary font-medium">{stat.label}</div>
             </div>
@@ -112,7 +132,7 @@ export default function Dashboard() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button className="nvidia-card nvidia-card-hover p-5 text-left group">
+            <button onClick={() => navigate('/files')} className="nvidia-card nvidia-card-hover p-5 text-left group">
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 rounded-lg bg-nvidia-green/10 group-hover:bg-nvidia-green/20 transition-colors">
                   <FolderOpen className="w-5 h-5 text-nvidia-green" />
@@ -124,7 +144,7 @@ export default function Dashboard() {
               </p>
             </button>
 
-            <button className="nvidia-card nvidia-card-hover p-5 text-left group">
+            <button onClick={() => navigate('/chat')} className="nvidia-card nvidia-card-hover p-5 text-left group">
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 rounded-lg bg-nvidia-green-bright/10 group-hover:bg-nvidia-green-bright/20 transition-colors">
                   <FileText className="w-5 h-5 text-nvidia-green-bright" />
@@ -136,7 +156,7 @@ export default function Dashboard() {
               </p>
             </button>
 
-            <button className="nvidia-card nvidia-card-hover p-5 text-left group">
+            <button onClick={() => navigate('/chat')} className="nvidia-card nvidia-card-hover p-5 text-left group">
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 rounded-lg bg-nvidia-green/10 group-hover:bg-nvidia-green/20 transition-colors">
                   <MessageSquare className="w-5 h-5 text-nvidia-green" />
@@ -170,24 +190,33 @@ export default function Dashboard() {
           </h2>
 
           <div className="nvidia-card p-4">
-            <StaggerContainer className="space-y-4">
-              {recentActivity.map((activity, index) => (
-                <StaggerItem key={index}>
-                  <div className="flex items-start gap-3 pb-3 border-b border-nvidia-gray-light last:border-0 last:pb-0">
-                    <div className={`w-2 h-2 rounded-full mt-2 shadow-[0_0_8px] ${activity.status === 'completed'
-                      ? 'bg-nvidia-green shadow-nvidia-green/40'
-                      : 'bg-nvidia-green-bright shadow-nvidia-green-bright/40'
+            {recentActivity.length === 0 ? (
+              <p className="text-sm text-nvidia-text-secondary text-center py-4">
+                No recent activity. Start by uploading files or chatting with AI.
+              </p>
+            ) : (
+              <StaggerContainer className="space-y-4">
+                {recentActivity.map((activity, index) => (
+                  <StaggerItem key={index}>
+                    <div className="flex items-start gap-3 pb-3 border-b border-nvidia-gray-light last:border-0 last:pb-0">
+                      <div className={`w-2 h-2 rounded-full mt-2 shadow-[0_0_8px] ${
+                        activity.status === 'completed'
+                          ? 'bg-nvidia-green shadow-nvidia-green/40'
+                          : activity.status === 'failed'
+                          ? 'bg-red-500 shadow-red-500/40'
+                          : 'bg-nvidia-green-bright shadow-nvidia-green-bright/40'
                       }`} />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium hover:text-nvidia-green cursor-pointer transition-colors">
-                        {activity.title}
-                      </p>
-                      <p className="text-xs text-nvidia-text-secondary">{activity.time}</p>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium hover:text-nvidia-green cursor-pointer transition-colors">
+                          {activity.title}
+                        </p>
+                        <p className="text-xs text-nvidia-text-secondary">{activity.time}</p>
+                      </div>
                     </div>
-                  </div>
-                </StaggerItem>
-              ))}
-            </StaggerContainer>
+                  </StaggerItem>
+                ))}
+              </StaggerContainer>
+            )}
           </div>
         </div>
       </div>

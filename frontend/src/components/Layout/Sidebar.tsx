@@ -1,15 +1,17 @@
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  FolderOpen, 
-  MessageSquare, 
-  ListTodo, 
+import { useQuery } from '@tanstack/react-query';
+import {
+  LayoutDashboard,
+  FolderOpen,
+  MessageSquare,
+  ListTodo,
   Settings,
   Menu,
   X,
   Cpu
 } from 'lucide-react';
 import { useStore } from '../../store';
+import { taskApi } from '../../services/api';
 
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -21,6 +23,15 @@ const navItems = [
 
 export default function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useStore();
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: taskApi.getTasks,
+    refetchInterval: 10000,
+  });
+  const activeTaskCount = tasks.filter(
+    (t: any) => ['executing', 'pending', 'paused', 'planning'].includes(t.status)
+  ).length;
 
   return (
     <aside 
@@ -60,8 +71,22 @@ export default function Sidebar() {
               }
             `}
           >
-            <item.icon className={`w-5 h-5 flex-shrink-0 ${sidebarOpen ? '' : 'mx-auto'}`} />
-            {sidebarOpen && <span className="truncate">{item.label}</span>}
+            <div className="relative flex-shrink-0">
+              <item.icon className={`w-5 h-5 ${sidebarOpen ? '' : 'mx-auto'}`} />
+              {item.label === 'Tasks' && activeTaskCount > 0 && !sidebarOpen && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-nvidia-green text-nvidia-black text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {activeTaskCount}
+                </span>
+              )}
+            </div>
+            {sidebarOpen && (
+              <span className="truncate flex-1">{item.label}</span>
+            )}
+            {sidebarOpen && item.label === 'Tasks' && activeTaskCount > 0 && (
+              <span className="ml-auto px-2 py-0.5 bg-nvidia-green text-nvidia-black text-xs font-bold rounded-full">
+                {activeTaskCount}
+              </span>
+            )}
             
             {/* Tooltip for collapsed state */}
             {!sidebarOpen && (

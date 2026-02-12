@@ -1,5 +1,16 @@
+import os
+import secrets
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+# Locate .env: check backend/ first, then project root
+_backend_dir = Path(__file__).resolve().parent.parent.parent
+_project_root = _backend_dir.parent
+_env_file = _backend_dir / ".env"
+if not _env_file.exists():
+    _env_file = _project_root / ".env"
+_env_path = str(_env_file) if _env_file.exists() else ".env"
 
 
 class Settings(BaseSettings):
@@ -17,7 +28,7 @@ class Settings(BaseSettings):
     # AI - Using the provided API key
     NVIDIA_API_KEY: Optional[str] = None
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
-    DEFAULT_MODEL: str = "nvidia/llama-3.1-nemotron-70b-instruct"
+    DEFAULT_MODEL: str = "nvidia/nemotron-3-nano-30b-a3b"
 
     # File Storage
     UPLOAD_DIR: str = "./uploads"
@@ -52,7 +63,7 @@ class Settings(BaseSettings):
     }
 
     # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = secrets.token_urlsafe(32)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # CORS
@@ -62,7 +73,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     class Config:
-        env_file = ".env"
+        env_file = _env_path
         case_sensitive = True
 
 

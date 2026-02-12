@@ -8,12 +8,18 @@ import Tasks from './pages/Tasks';
 import Settings from './pages/Settings';
 import ToastContainer from './components/UI/ToastContainer';
 import PageTransition from './components/UI/PageTransition';
+import { useStore } from './store';
 
 function App() {
   const location = useLocation();
+  const { settings } = useStore();
+
+  const fontSizeClass =
+    settings.fontSize === 'small' ? 'text-sm' :
+    settings.fontSize === 'large' ? 'text-lg' : 'text-base';
 
   return (
-    <div className="min-h-screen bg-nvidia-black text-nvidia-white">
+    <div className={`min-h-screen bg-nvidia-black text-nvidia-white ${fontSizeClass}`}>
       <Layout>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>

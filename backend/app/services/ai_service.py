@@ -4,10 +4,12 @@ import httpx
 from typing import List, Optional, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.models.conversation import Conversation, Message, MessageAttachment
 from app.models.task import Task, TaskStep
+from app.services.safety_service import safety_service
 
 class AIService:
     def __init__(self):
@@ -27,7 +29,18 @@ class AIService:
         conversation_id: Optional[str] = None,
         files: Optional[List[str]] = None
     ) -> dict:
-        """Send a chat message to NVIDIA Nemotron-3"""
+        """Send a chat message to NVIDIA Nemotron-3 with safety checks"""
+        
+        # Check prompt safety first
+        safety_check = await safety_service.check_content_safety(message)
+        
+        if not safety_check["prompt_safe"]:
+            return {
+                "message": "I cannot process this request as it contains harmful content. Please rephrase your message.",
+                "conversation_id": conversation_id,
+                "safety_blocked": True,
+                "safety_reason": safety_check.get("prompt_harm", "harmful")
+            }
         
         # Get or create conversation
         if conversation_id:
@@ -57,7 +70,17 @@ class AIService:
         # Call NVIDIA API
         try:
             response = await self._call_nvidia_api(message, context)
-            ai_content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            ai_content = self._extract_content(response)
+            
+            # Check response safety
+            response_safety = await safety_service.check_content_safety(
+                message, 
+                ai_content
+            )
+            
+            if not response_safety["response_safe"]:
+                ai_content = "I apologize, but I cannot provide that response as it may contain harmful content. Please try rephrasing your question."
+                
         except Exception as e:
             ai_content = f"Error: {str(e)}"
         
@@ -95,13 +118,25 @@ class AIService:
     async def get_conversation(self, db: AsyncSession, conversation_id: str) -> Optional[dict]:
         """Get a specific conversation with messages"""
         result = await db.execute(
-            select(Conversation).where(Conversation.id == conversation_id)
+            select(
+                Conversation.id, Conversation.title
+            ).where(Conversation.id == conversation_id)
         )
-        conversation = result.scalar_one_or_none()
-        
+        conversation = result.first()
+
         if not conversation:
             return None
-        
+
+        # Query messages as rows to avoid async lazy-load issues with ORM objects
+        msg_result = await db.execute(
+            select(
+                Message.id, Message.role, Message.content, Message.timestamp
+            )
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.timestamp.asc())
+        )
+        messages = msg_result.all()
+
         return {
             "id": conversation.id,
             "title": conversation.title,
@@ -112,7 +147,7 @@ class AIService:
                     "content": msg.content,
                     "timestamp": msg.timestamp.isoformat() if msg.timestamp else None
                 }
-                for msg in conversation.messages
+                for msg in messages
             ]
         }
     
@@ -147,7 +182,7 @@ Files: {file_info}"""
         
         try:
             response = await self._call_nvidia_api(prompt)
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = self._extract_content(response)
         except Exception as e:
             content = f"Analysis error: {str(e)}"
         
@@ -183,7 +218,7 @@ Provide 3-5 clear steps."""
         
         try:
             response = await self._call_nvidia_api(prompt)
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = self._extract_content(response)
             
             # Parse steps from response (simplified)
             steps_text = content.split('\n')
@@ -242,7 +277,7 @@ Provide:
         
         try:
             response = await self._call_nvidia_api(synthesis_prompt)
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = self._extract_content(response)
         except Exception as e:
             content = f"Synthesis error: {str(e)}"
         
@@ -266,6 +301,13 @@ Provide:
                 context_parts.append(f"File: {name} (type: {ext}, size: {size} bytes)")
 
         return "\n".join(context_parts) if context_parts else ""
+
+    @staticmethod
+    def _extract_content(response: dict) -> str:
+        """Extract text content from NVIDIA API response, handling reasoning models."""
+        msg = response.get("choices", [{}])[0].get("message", {})
+        # Some NVIDIA models (e.g. nemotron-3-nano) return content in reasoning_content
+        return msg.get("content") or msg.get("reasoning_content") or ""
 
     async def _call_nvidia_api(self, message: str, context: str = "") -> dict:
         """Call the NVIDIA Nemotron-3 API"""
