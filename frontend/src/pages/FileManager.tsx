@@ -23,13 +23,13 @@ import {
   FileVideo,
   FileAudio,
   Zap,
-  Loader2
+  X
 } from 'lucide-react';
 import FileContextMenu from '../components/FileManager/FileContextMenu';
 import DragDropZone from '../components/FileManager/DragDropZone';
 import FilePreviewModal from '../components/FilePreview/FilePreviewModal';
 import ConfirmDialog from '../components/UI/ConfirmDialog';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useKeyboardShortcuts, setKeyboardShortcutCallbacks } from '../hooks/useKeyboardShortcuts';
 import { useFileSelection } from '../hooks/useFileSelection';
 import { FileListSkeleton } from '../components/UI/Skeleton';
 import GlowEffect from '../components/UI/GlowEffect';
@@ -48,14 +48,17 @@ export default function FileManager() {
     setCurrentPath,
     setFiles,
     setFileLoading,
-    addToast
+    addToast,
+    setActiveTask,
+    showTaskPanel,
+    toggleTaskPanel,
   } = useStore();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [showOrganizeModal, setShowOrganizeModal] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isOrganizing, setIsOrganizing] = useState(false);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, file: any } | null>(null);
@@ -65,6 +68,9 @@ export default function FileManager() {
 
   // Confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void } | null>(null);
+
+  // Properties modal state
+  const [propertiesFile, setPropertiesFile] = useState<any>(null);
 
   // Keyboard shortcuts
   useKeyboardShortcuts();
@@ -102,11 +108,71 @@ export default function FileManager() {
     loadFiles();
   }, [loadFiles]);
 
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }, []);
+
+  const handleDownloadPaths = useCallback(async (paths: string[]) => {
+    const fileTargets = files.filter(file => paths.includes(file.path) && !file.isDirectory);
+    if (fileTargets.length === 0) {
+      addToast('warning', 'No downloadable files selected');
+      return;
+    }
+
+    let successCount = 0;
+    for (const file of fileTargets) {
+      try {
+        const blob = await fileApi.downloadFile(file.path);
+        downloadBlob(blob, file.name);
+        successCount += 1;
+      } catch (error) {
+        console.error('Download failed:', error);
+      }
+    }
+
+    if (successCount > 0) {
+      addToast('success', `Downloaded ${successCount} file(s)`);
+    }
+    if (successCount < fileTargets.length) {
+      addToast('error', `${fileTargets.length - successCount} file(s) failed to download`);
+    }
+  }, [files, addToast, downloadBlob]);
+
+  const handleDeletePaths = useCallback(async (paths: string[]) => {
+    if (paths.length === 0) return;
+
+    try {
+      const results = await fileApi.deleteFiles(paths);
+      const successCount = results.filter(result => result.success).length;
+      const failedResults = results.filter(result => !result.success);
+
+      if (successCount > 0) {
+        addToast('success', `Deleted ${successCount} file(s)`);
+        paths.forEach(path => deselectFile(path));
+        await loadFiles();
+      }
+
+      if (failedResults.length > 0) {
+        const firstError = failedResults[0].error || 'Delete failed';
+        addToast('error', `${failedResults.length} file(s) failed: ${firstError}`);
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      addToast('error', 'Failed to delete files');
+    }
+  }, [addToast, deselectFile, loadFiles]);
+
   const handleDrop = useCallback(async (acceptedFiles: File[]) => {
     setIsDragActive(false);
     if (acceptedFiles.length === 0) return;
 
-    setIsUploading(true);
     try {
       await fileApi.uploadFiles(acceptedFiles, currentPath || '');
       addToast('success', `Successfully uploaded ${acceptedFiles.length} file(s)`);
@@ -114,14 +180,30 @@ export default function FileManager() {
     } catch (error) {
       console.error('Upload failed:', error);
       addToast('error', 'Failed to upload files');
-    } finally {
-      setIsUploading(false);
     }
   }, [currentPath, loadFiles, addToast]);
 
   const handleRefresh = useCallback(() => {
     loadFiles();
   }, [loadFiles]);
+
+  const handleStartOrganize = useCallback(async () => {
+    setIsOrganizing(true);
+    try {
+      const task = await fileApi.organizeFiles(currentPath || '', 'content');
+      setShowOrganizeModal(false);
+      setActiveTask(task);
+      if (!showTaskPanel) {
+        toggleTaskPanel();
+      }
+      addToast('success', 'AI organize task created');
+    } catch (error) {
+      console.error('Failed to start AI organize:', error);
+      addToast('error', 'Failed to start AI organize');
+    } finally {
+      setIsOrganizing(false);
+    }
+  }, [addToast, currentPath, setActiveTask, showTaskPanel, toggleTaskPanel]);
 
   const filteredFiles = files.filter(file =>
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -176,13 +258,38 @@ export default function FileManager() {
   };
 
   // Handle context menu actions
-  const handleContextMenuAction = (action: string, file: any) => {
+  const handleContextMenuAction = useCallback(async (action: string, file: any) => {
     switch (action) {
       case 'open':
         setPreviewFile(file);
         break;
       case 'rename':
-        console.log('Rename:', file);
+        if (file.isDirectory) {
+          addToast('warning', 'Folder rename is not supported yet');
+          break;
+        }
+        {
+          const targetName = window.prompt('Enter new filename', file.name)?.trim();
+          if (!targetName || targetName === file.name) {
+            break;
+          }
+
+          try {
+            const result = await fileApi.renameFiles([
+              { source: file.path, target: targetName },
+            ]);
+            if (result.renamedCount > 0) {
+              addToast('success', `Renamed to "${targetName}"`);
+              await loadFiles();
+            } else {
+              const message = result.results[0]?.error || 'Failed to rename file';
+              addToast('error', message);
+            }
+          } catch (error) {
+            console.error('Rename failed:', error);
+            addToast('error', 'Failed to rename file');
+          }
+        }
         break;
       case 'copy':
         navigator.clipboard.writeText(file.path);
@@ -193,18 +300,53 @@ export default function FileManager() {
           title: 'Delete File',
           message: `Are you sure you want to delete "${file.name}"? This action cannot be undone.`,
           onConfirm: () => {
-            console.log('Delete:', file);
             setConfirmDialog(null);
+            void handleDeletePaths([file.path]);
           }
         });
         break;
       case 'download':
-        console.log('Download:', file);
+        void handleDownloadPaths([file.path]);
+        break;
+      case 'cut':
+        navigator.clipboard.writeText(file.path);
+        addToast('info', `Cut "${file.name}" — path copied to clipboard`);
+        break;
+      case 'properties':
+        setPropertiesFile(file);
         break;
       default:
-        console.log('Action:', action, file);
+        break;
     }
-  };
+  }, [addToast, handleDeletePaths, handleDownloadPaths, loadFiles]);
+
+  // Register keyboard shortcut callbacks
+  useEffect(() => {
+    setKeyboardShortcutCallbacks({
+      onDelete: (paths: string[]) => {
+        const selected = [...paths];
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Delete Selected Files',
+          message: `Delete ${selected.length} selected file(s)? This action cannot be undone.`,
+          onConfirm: () => {
+            setConfirmDialog(null);
+            void handleDeletePaths(selected);
+          },
+        });
+      },
+      onRename: (path: string) => {
+        const file = files.find((f) => f.path === path);
+        if (file) {
+          handleContextMenuAction('rename', file);
+        }
+      },
+      onOpen: (path: string) => {
+        const file = files.find((f) => f.path === path);
+        if (file) setPreviewFile(file);
+      },
+    });
+  }, [files, handleDeletePaths, handleContextMenuAction]);
 
   // Handle file click with modifiers
   const onFileClick = (e: React.MouseEvent, file: any, index: number) => {
@@ -314,11 +456,28 @@ export default function FileManager() {
           {selectedFiles.length > 0 && (
             <>
               <div className="h-6 w-px bg-nvidia-gray-light" />
-              <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-nvidia-gray transition-colors text-sm text-nvidia-text-secondary">
+              <button
+                onClick={() => void handleDownloadPaths(selectedFiles)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-nvidia-gray transition-colors text-sm text-nvidia-text-secondary"
+              >
                 <Download className="w-4 h-4" />
                 Download
               </button>
-              <button className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors text-sm">
+              <button
+                onClick={() => {
+                  const selected = [...selectedFiles];
+                  setConfirmDialog({
+                    isOpen: true,
+                    title: 'Delete Selected Files',
+                    message: `Delete ${selected.length} selected file(s)? This action cannot be undone.`,
+                    onConfirm: () => {
+                      setConfirmDialog(null);
+                      void handleDeletePaths(selected);
+                    }
+                  });
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors text-sm"
+              >
                 <Trash2 className="w-4 h-4" />
                 Delete
               </button>
@@ -521,6 +680,51 @@ export default function FileManager() {
         />
       )}
 
+      {/* Properties Modal */}
+      {propertiesFile && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="nvidia-card w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold">File Properties</h2>
+              <button onClick={() => setPropertiesFile(null)} className="p-1 rounded hover:bg-nvidia-gray">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between py-2 border-b border-nvidia-gray-light">
+                <span className="text-nvidia-text-secondary">Name</span>
+                <span className="font-medium">{propertiesFile.name}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-nvidia-gray-light">
+                <span className="text-nvidia-text-secondary">Path</span>
+                <span className="font-medium truncate max-w-[250px]">{propertiesFile.path}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-nvidia-gray-light">
+                <span className="text-nvidia-text-secondary">Type</span>
+                <span className="font-medium">{propertiesFile.isDirectory ? 'Directory' : (propertiesFile.extension?.toUpperCase() || 'Unknown')}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-nvidia-gray-light">
+                <span className="text-nvidia-text-secondary">Size</span>
+                <span className="font-medium">{propertiesFile.isDirectory ? '--' : formatFileSize(propertiesFile.size)}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-nvidia-gray-light">
+                <span className="text-nvidia-text-secondary">Modified</span>
+                <span className="font-medium">{formatDate(propertiesFile.modifiedAt)}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-nvidia-text-secondary">Created</span>
+                <span className="font-medium">{formatDate(propertiesFile.createdAt)}</span>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button onClick={() => setPropertiesFile(null)} className="nvidia-button-secondary px-6 py-2">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Organize Modal */}
       {showOrganizeModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -579,13 +783,12 @@ export default function FileManager() {
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  setShowOrganizeModal(false);
-                }}
+                onClick={() => void handleStartOrganize()}
+                disabled={isOrganizing}
                 className="nvidia-button flex items-center gap-2 py-3 px-8 text-lg"
               >
                 <Zap className="w-5 h-5" />
-                Start AI Analysis
+                {isOrganizing ? 'Starting...' : 'Start AI Analysis'}
               </button>
             </div>
           </div>

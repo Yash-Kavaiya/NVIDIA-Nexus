@@ -1,5 +1,12 @@
 import axios from 'axios';
-import type { FileItem, Task, Message, AIRequest, AIResponse } from '../types';
+import type {
+  FileItem,
+  Task,
+  TaskStep,
+  Message,
+  AIRequest,
+  AIResponse,
+} from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -11,10 +18,71 @@ const api = axios.create({
   timeout: 30000,
 });
 
+type ApiTaskStep = Partial<TaskStep> & {
+  task_id?: string;
+  started_at?: string;
+  completed_at?: string;
+};
+
+type ApiTask = Partial<Task> & {
+  created_at?: string;
+  updated_at?: string;
+  completed_at?: string;
+  steps?: ApiTaskStep[];
+};
+
+type FileDeleteResult = {
+  path: string;
+  success: boolean;
+  error?: string;
+};
+
+type RenameOperationResult = {
+  source: string;
+  target?: string;
+  success: boolean;
+  error?: string;
+};
+
+type RenameResponse = {
+  results: RenameOperationResult[];
+  renamedCount: number;
+  failedCount: number;
+};
+
+const generateFallbackId = (): string => Math.random().toString(36).slice(2);
+
+const normalizeTaskStep = (step: ApiTaskStep): TaskStep => ({
+  id: step.id ?? generateFallbackId(),
+  description: step.description ?? '',
+  status: step.status ?? 'pending',
+  order: step.order ?? 0,
+  result: step.result,
+  error: step.error,
+});
+
+const normalizeTask = (task: ApiTask): Task => {
+  const createdAt = task.createdAt ?? task.created_at ?? new Date().toISOString();
+  const updatedAt = task.updatedAt ?? task.updated_at ?? createdAt;
+
+  return {
+    id: task.id ?? generateFallbackId(),
+    title: task.title ?? 'Untitled Task',
+    description: task.description ?? '',
+    status: task.status ?? 'pending',
+    progress: typeof task.progress === 'number' ? task.progress : 0,
+    steps: Array.isArray(task.steps) ? task.steps.map(normalizeTaskStep) : [],
+    createdAt,
+    updatedAt,
+    completedAt: task.completedAt ?? task.completed_at,
+    error: task.error,
+  };
+};
+
 // File API
 export const fileApi = {
   scanDirectory: async (path: string): Promise<FileItem[]> => {
-    const response = await api.post('/files/scan/', { path });
+    const response = await api.post('/files/scan', null, { params: { path } });
     return response.data;
   },
 
@@ -24,17 +92,26 @@ export const fileApi = {
   },
 
   organizeFiles: async (path: string, strategy: string): Promise<Task> => {
-    const response = await api.post('/files/organize/', { path, strategy });
-    return response.data;
+    const response = await api.post('/files/organize', null, {
+      params: { path, strategy },
+    });
+    return normalizeTask(response.data);
   },
 
-  renameFiles: async (operations: { source: string; target: string }[]): Promise<Task> => {
-    const response = await api.post('/files/rename/', { operations });
-    return response.data;
+  renameFiles: async (
+    operations: { source: string; target: string }[]
+  ): Promise<RenameResponse> => {
+    const response = await api.post('/files/rename', operations);
+    const data = response.data ?? {};
+    return {
+      results: Array.isArray(data.results) ? data.results : [],
+      renamedCount: typeof data.renamed_count === 'number' ? data.renamed_count : 0,
+      failedCount: typeof data.failed_count === 'number' ? data.failed_count : 0,
+    };
   },
 
-  deleteFiles: async (paths: string[]): Promise<Task> => {
-    const response = await api.post('/files/delete/', { paths });
+  deleteFiles: async (paths: string[]): Promise<FileDeleteResult[]> => {
+    const response = await api.post('/files/delete', paths);
     return response.data;
   },
 
@@ -67,23 +144,23 @@ export const fileApi = {
 // Task API
 export const taskApi = {
   getTasks: async (): Promise<Task[]> => {
-    const response = await api.get('/tasks');
-    return response.data;
+    const response = await api.get('/tasks/');
+    return Array.isArray(response.data) ? response.data.map(normalizeTask) : [];
   },
 
   getTask: async (id: string): Promise<Task> => {
     const response = await api.get(`/tasks/${id}`);
-    return response.data;
+    return normalizeTask(response.data);
   },
 
   pauseTask: async (id: string): Promise<Task> => {
     const response = await api.post(`/tasks/${id}/pause`);
-    return response.data;
+    return normalizeTask(response.data);
   },
 
   resumeTask: async (id: string): Promise<Task> => {
     const response = await api.post(`/tasks/${id}/resume`);
-    return response.data;
+    return normalizeTask(response.data);
   },
 
   cancelTask: async (id: string): Promise<void> => {

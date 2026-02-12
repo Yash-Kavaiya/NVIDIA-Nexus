@@ -1,14 +1,25 @@
 import { useEffect, useCallback } from 'react';
 import { useStore } from '../store';
 
+interface KeyboardShortcutCallbacks {
+  onDelete?: (paths: string[]) => void;
+  onRename?: (path: string) => void;
+  onOpen?: (path: string) => void;
+}
+
+let _callbacks: KeyboardShortcutCallbacks = {};
+
+export function setKeyboardShortcutCallbacks(cb: KeyboardShortcutCallbacks) {
+  _callbacks = cb;
+}
+
 export function useKeyboardShortcuts() {
   const {
     selectedFiles,
     files,
-    selectFile,
-    deselectFile,
     selectAllFiles,
-    deselectAllFiles
+    deselectAllFiles,
+    addToast
   } = useStore();
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -34,61 +45,29 @@ export function useKeyboardShortcuts() {
       case 'c':
         if (isCtrl && selectedFiles.length > 0) {
           e.preventDefault();
-          // Copy to clipboard
-          navigator.clipboard.writeText(JSON.stringify(selectedFiles));
-          console.log('Copied files:', selectedFiles);
-        }
-        break;
-
-      case 'x':
-        if (isCtrl && selectedFiles.length > 0) {
-          e.preventDefault();
-          // Cut operation
-          console.log('Cut files:', selectedFiles);
-        }
-        break;
-
-      case 'v':
-        if (isCtrl) {
-          e.preventDefault();
-          // Paste operation
-          console.log('Paste operation');
+          navigator.clipboard.writeText(selectedFiles.join('\n'));
+          addToast('info', `Copied ${selectedFiles.length} path(s) to clipboard`);
         }
         break;
 
       case 'Delete':
         if (selectedFiles.length > 0) {
           e.preventDefault();
-          // Delete files
-          console.log('Delete files:', selectedFiles);
+          _callbacks.onDelete?.(selectedFiles);
         }
         break;
 
       case 'F2':
         if (selectedFiles.length === 1) {
           e.preventDefault();
-          // Rename file
-          console.log('Rename file:', selectedFiles[0]);
+          _callbacks.onRename?.(selectedFiles[0]);
         }
-        break;
-
-      case 'ArrowUp':
-        e.preventDefault();
-        // Navigate up
-        console.log('Navigate up');
-        break;
-
-      case 'ArrowDown':
-        e.preventDefault();
-        // Navigate down
-        console.log('Navigate down');
         break;
 
       case 'Enter':
         if (selectedFiles.length === 1) {
           e.preventDefault();
-          // Open file
-          console.log('Open file:', selectedFiles[0]);
+          _callbacks.onOpen?.(selectedFiles[0]);
         }
         break;
 
@@ -96,7 +75,7 @@ export function useKeyboardShortcuts() {
         deselectAllFiles();
         break;
     }
-  }, [selectedFiles, files, selectFile, deselectFile, selectAllFiles, deselectAllFiles]);
+  }, [selectedFiles, files, selectAllFiles, deselectAllFiles, addToast]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

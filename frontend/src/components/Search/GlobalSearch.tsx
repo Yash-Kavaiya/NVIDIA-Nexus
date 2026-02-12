@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, X, Clock, File, Folder, Filter, ChevronRight } from 'lucide-react';
+import { useStore } from '../../store';
 
 interface GlobalSearchProps {
   isOpen: boolean;
@@ -31,20 +33,29 @@ export default function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     }
   }, [query]);
 
+  const { files } = useStore();
+  const navigate = useNavigate();
+
   const performSearch = (searchQuery: string) => {
-    const mockResults = [
-      { type: 'file', name: 'document.pdf', path: '/documents', size: '2.4 MB' },
-      { type: 'file', name: 'script.js', path: '/code', size: '12 KB' },
-      { type: 'folder', name: 'Projects', path: '/', itemCount: 24 },
-    ].filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    setResults(mockResults);
+    const lowerQ = searchQuery.toLowerCase();
+    const matched = files
+      .filter((f) => f.name.toLowerCase().includes(lowerQ) || (f.path || '').toLowerCase().includes(lowerQ))
+      .slice(0, 20)
+      .map((f) => ({
+        type: f.isDirectory ? 'folder' : 'file',
+        name: f.name,
+        path: f.path || '/',
+        size: f.size ? `${(f.size / 1024).toFixed(1)} KB` : '',
+        itemCount: 0,
+      }));
+    setResults(matched);
   };
 
   const handleSelect = (result: any) => {
     const newRecent = [query, ...recentSearches.filter(s => s !== query)].slice(0, 10);
     setRecentSearches(newRecent);
     localStorage.setItem('recentSearches', JSON.stringify(newRecent));
-    console.log('Selected:', result);
+    navigate('/files');
     onClose();
   };
 

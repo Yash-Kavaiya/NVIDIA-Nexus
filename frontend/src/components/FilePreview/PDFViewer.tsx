@@ -68,6 +68,25 @@ export default function PDFViewer({ src, filename, onClose }: PDFViewerProps) {
   const handleZoomIn = () => setScale(s => Math.min(s + 0.1, 3));
   const handleZoomOut = () => setScale(s => Math.max(s - 0.1, 0.5));
   const handleRotate = () => setRotation(r => (r + 90) % 360);
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(src);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('PDF download failed:', error);
+    }
+  };
 
   // Handle tool selection
   const selectTool = (tool: AnnotationTool) => {
@@ -184,7 +203,7 @@ export default function PDFViewer({ src, filename, onClose }: PDFViewerProps) {
     setAiResponse('');
 
     try {
-      const response = await fetch('http://localhost:8000/api/chat/', {
+      const response = await fetch('/api/chat/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,7 +214,7 @@ export default function PDFViewer({ src, filename, onClose }: PDFViewerProps) {
 
       if (response.ok) {
         const data = await response.json();
-        setAiResponse(data.response || 'AI analysis complete. The document appears to be related to the filename context.');
+        setAiResponse(data.message || 'AI analysis complete. The document appears to be related to the filename context.');
       } else {
         setAiResponse('Unable to analyze. Please ensure the AI service is running.');
       }
@@ -508,7 +527,7 @@ export default function PDFViewer({ src, filename, onClose }: PDFViewerProps) {
             <button className="p-2 rounded-lg hover:bg-nvidia-gray">
               <Printer className="w-4 h-4" />
             </button>
-            <button className="p-2 rounded-lg hover:bg-nvidia-gray">
+            <button onClick={handleDownload} className="p-2 rounded-lg hover:bg-nvidia-gray">
               <Download className="w-4 h-4" />
             </button>
             <div className="w-px h-6 bg-nvidia-gray-light mx-2" />

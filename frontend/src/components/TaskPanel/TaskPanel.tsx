@@ -1,8 +1,37 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useStore } from '../../store';
+import { taskApi } from '../../services/api';
 import { X, Play, Pause, Square, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 export default function TaskPanel() {
-  const { tasks, activeTask, toggleTaskPanel } = useStore();
+  const queryClient = useQueryClient();
+  const { activeTask, setActiveTask, toggleTaskPanel } = useStore();
+
+  // Fetch tasks with React Query (synced with Tasks page)
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: taskApi.getTasks,
+    refetchInterval: 5000
+  });
+
+  // Mutations for task actions
+  const pauseMutation = useMutation({
+    mutationFn: taskApi.pauseTask,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] })
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: taskApi.resumeTask,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tasks'] })
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: taskApi.cancelTask,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setActiveTask(null);
+    }
+  });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -17,9 +46,16 @@ export default function TaskPanel() {
     }
   };
 
-  const handlePauseResume = (taskId: string, currentStatus: string) => {
-    // This would call the API in a real implementation
-    console.log(`${currentStatus === 'paused' ? 'Resume' : 'Pause'} task ${taskId}`);
+  const handlePause = (taskId: string) => {
+    pauseMutation.mutate(taskId);
+  };
+
+  const handleResume = (taskId: string) => {
+    resumeMutation.mutate(taskId);
+  };
+
+  const handleCancel = (taskId: string) => {
+    cancelMutation.mutate(taskId);
   };
 
   return (
@@ -61,7 +97,7 @@ export default function TaskPanel() {
 
           {/* Steps */}
           <div className="space-y-2 max-h-40 overflow-y-auto">
-            {activeTask.steps.map((step) => (
+            {activeTask.steps?.map((step) => (
               <div key={step.id} className="flex items-center gap-2 text-xs">
                 <div className={`w-2 h-2 rounded-full ${step.status === 'completed' ? 'bg-nvidia-green' :
                     step.status === 'in_progress' ? 'bg-nvidia-green-bright animate-pulse' :
@@ -79,26 +115,34 @@ export default function TaskPanel() {
           <div className="flex gap-2 mt-4">
             {activeTask.status === 'executing' ? (
               <button
-                onClick={() => handlePauseResume(activeTask.id, activeTask.status)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-nvidia-gray rounded-lg text-sm hover:bg-nvidia-gray-light transition-colors"
+                onClick={() => handlePause(activeTask.id)}
+                disabled={pauseMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-nvidia-gray rounded-lg text-sm hover:bg-nvidia-gray-light transition-colors disabled:opacity-50"
               >
                 <Pause className="w-4 h-4" />
-                Pause
+                {pauseMutation.isPending ? 'Pausing...' : 'Pause'}
               </button>
             ) : activeTask.status === 'paused' ? (
               <button
-                onClick={() => handlePauseResume(activeTask.id, activeTask.status)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-nvidia-green text-nvidia-black rounded-lg text-sm hover:bg-nvidia-green-bright transition-colors"
+                onClick={() => handleResume(activeTask.id)}
+                disabled={resumeMutation.isPending}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-nvidia-green text-nvidia-black rounded-lg text-sm hover:bg-nvidia-green-bright transition-colors disabled:opacity-50"
               >
                 <Play className="w-4 h-4" />
-                Resume
+                {resumeMutation.isPending ? 'Resuming...' : 'Resume'}
               </button>
             ) : null}
 
-            <button className="flex items-center justify-center gap-2 px-3 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors">
-              <Square className="w-4 h-4" />
-              Cancel
-            </button>
+            {['planning', 'pending', 'executing', 'paused'].includes(activeTask.status) && (
+              <button
+                onClick={() => handleCancel(activeTask.id)}
+                disabled={cancelMutation.isPending}
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors disabled:opacity-50"
+              >
+                <Square className="w-4 h-4" />
+                {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -113,13 +157,38 @@ export default function TaskPanel() {
           {tasks.filter(t => t.id !== activeTask?.id).map((task) => (
             <div
               key={task.id}
+              onClick={() => setActiveTask(task)}
               className="p-3 rounded-lg bg-nvidia-gray/50 border border-nvidia-gray-light hover:border-nvidia-green/50 transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2 mb-1">
                 {getStatusIcon(task.status)}
                 <span className="text-sm font-medium truncate">{task.title}</span>
               </div>
-              <div className="flex items-center justify-between text-xs text-nvidia-text-secondary">
+              {/* Progress bar */}
+              <div className="h-1.5 bg-nvidia-gray rounded-full overflow-hidden mt-2 mb-1">
+                <div
+                  className="h-full bg-gradient-to-r from-nvidia-green to-nvidia-green-bright transition-all duration-500"
+                  style={{ width: `${task.progress}%` }}
+                />
+              </div>
+              {/* Step dots */}
+              {task.steps && task.steps.length > 0 && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  {task.steps.map((step: any) => (
+                    <div
+                      key={step.id}
+                      title={step.description}
+                      className={`w-2 h-2 rounded-full ${
+                        step.status === 'completed' ? 'bg-nvidia-green' :
+                        step.status === 'in_progress' ? 'bg-nvidia-green-bright animate-pulse' :
+                        step.status === 'failed' ? 'bg-red-500' :
+                        'bg-nvidia-gray-light'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs text-nvidia-text-secondary mt-1">
                 <span>{task.progress}% complete</span>
                 <span>{new Date(task.updatedAt).toLocaleTimeString()}</span>
               </div>

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.database import init_db
-from app.api import files, tasks, chat, ai
+from app.api import files, tasks, chat, ai, ocr, embeddings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,8 +36,8 @@ app.include_router(files.router, prefix=f"{settings.API_V1_PREFIX}/files", tags=
 app.include_router(tasks.router, prefix=f"{settings.API_V1_PREFIX}/tasks", tags=["tasks"])
 app.include_router(chat.router, prefix=f"{settings.API_V1_PREFIX}/chat", tags=["chat"])
 app.include_router(ai.router, prefix=f"{settings.API_V1_PREFIX}/ai", tags=["ai"])
-from app.api import ocr
 app.include_router(ocr.router, prefix=f"{settings.API_V1_PREFIX}/ocr", tags=["ocr"])
+app.include_router(embeddings.router, prefix=f"{settings.API_V1_PREFIX}/embeddings", tags=["embeddings"])
 
 # WebSocket endpoint
 @app.websocket("/ws")

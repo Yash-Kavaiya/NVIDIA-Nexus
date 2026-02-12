@@ -53,6 +53,7 @@ interface AppActions {
   // Chat Actions
   setConversations: (conversations: Conversation[]) => void;
   setCurrentConversation: (conversation: Conversation | null) => void;
+  setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessage: (id: string, updates: Partial<Message>) => void;
   setChatLoading: (loading: boolean) => void;
@@ -138,6 +139,7 @@ export const useStore = create<AppState & AppActions>()(
       // Chat Actions
       setConversations: (conversations) => set({ conversations }),
       setCurrentConversation: (conversation) => set({ currentConversation: conversation }),
+      setMessages: (messages) => set({ messages }),
       addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
       updateMessage: (id, updates) => set((state) => ({
         messages: state.messages.map((m) => (m.id === id ? { ...m, ...updates } : m)),
