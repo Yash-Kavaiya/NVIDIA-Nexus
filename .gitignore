@@ -60,5 +60,26 @@ backend/nvidia_nexus.db
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate.d/
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# AWS Credentials
+*accessKeys.csv
+*credentials.csv
+*.pem
+*.key
+
 # Misc
 nul
